@@ -162,7 +162,7 @@ describe('scene animation construction with a fake engine', () => {
   });
 });
 
-function fakeDatabase() {
+function fakeDatabase(metaSaveResult: 'object' | boolean | null = true) {
   const assets = new Map<string, Record<string, unknown>>();
   const metas = new Map<string, unknown>();
   const request = vi.fn<Request>(async (channel, message, ...args) => {
@@ -176,7 +176,7 @@ function fakeDatabase() {
       return undefined;
     if (message === 'save-asset-meta') {
       metas.set(url, JSON.parse(String(args[1])));
-      return assets.get(url);
+      return metaSaveResult === 'object' ? assets.get(url) : metaSaveResult;
     }
     if (message === 'import-asset') {
       const destination = String(args[1]);
@@ -213,6 +213,24 @@ function fakeDatabase() {
 }
 
 describe('Cocos message adapter (mocked Editor)', () => {
+  it('accepts the declared AssetInfo metadata-save response as well as runtime true', async () => {
+    const { request } = fakeDatabase('object');
+    await expect(
+      importTestAssets(createCocos38Adapter(request), directory),
+    ).resolves.toBe(`${TEST_DESTINATION}/walk.anim`);
+  });
+  it.each([false, null])(
+    'rejects metadata-save failure %s before creating an animation',
+    async (result) => {
+      const { request } = fakeDatabase(result);
+      await expect(
+        importTestAssets(createCocos38Adapter(request), directory),
+      ).rejects.toThrow('save-asset-meta failed');
+      expect(request.mock.calls.some((call) => call[0] === 'scene')).toBe(
+        false,
+      );
+    },
+  );
   it('imports eight assets, updates pivot, resolves UUIDs in manifest order, and saves a clip', async () => {
     const { request, metas } = fakeDatabase();
     await importTestAssets(createCocos38Adapter(request), directory);

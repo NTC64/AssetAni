@@ -71,7 +71,7 @@ export function createCocos38Adapter(
   async function configureFrame(url: string, manifest: GenerationManifest) {
     let meta = metaSchema.parse(await db('query-asset-meta', url));
     meta.userData.type = 'sprite-frame';
-    infoSchema.parse(await db('save-asset-meta', url, JSON.stringify(meta)));
+    await saveMeta(url, meta);
     await db('reimport-asset', url);
     meta = metaSchema.parse(await db('query-asset-meta', url));
     const sprites = Object.values(meta.subMetas).filter(
@@ -97,8 +97,18 @@ export function createCocos38Adapter(
         });
       }
     }
-    infoSchema.parse(await db('save-asset-meta', url, JSON.stringify(meta)));
+    await saveMeta(url, meta);
     await db('reimport-asset', url);
+  }
+  async function saveMeta(url: string, meta: z.infer<typeof metaSchema>) {
+    const result = await db('save-asset-meta', url, JSON.stringify(meta));
+    // Creator 3.8.8 runtime can return a boolean acknowledgement, despite
+    // the published declaration specifying AssetInfo | null.
+    if (!z.union([z.literal(true), infoSchema]).safeParse(result).success) {
+      throw new Error(
+        `Asset Database save-asset-meta failed for ${url}: expected true or AssetInfo.`,
+      );
+    }
   }
   return {
     async importGeneration(input: ImportInput) {

@@ -1,5 +1,7 @@
 # Cocos 3.8 API evidence and limitations
 
+Runtime correction from the owner's Creator 3.8.8 log (2026-09-09): `save-asset-meta` returned a boolean where the published declaration specified `AssetInfo | null`. The adapter now accepts `true` or a validated AssetInfo, rejects `false`/null/unrecognized values, and continues querying actual metadata/subassets through AssetDB. Regression tests cover both success shapes and failed acknowledgements. The corrected build still needs a Test Import run in the owner's editor.
+
 Inspected on 2026-09-09. No installed Creator executable was found in checked common installation directories. The empty repository had no local editor API declarations or project. Official declarations were therefore inspected from [cocos/creator-types](https://github.com/cocos/creator-types/tree/f9460c0b5a9f3eb3eeb70ecaa734518bd5db613f), whose package version is 3.8.8. The package is also pinned as a development dependency.
 
 | Used boundary                                                                                                                                             | Official source inspected                              |

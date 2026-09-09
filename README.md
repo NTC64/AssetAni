@@ -109,7 +109,7 @@ The panel uses native HTML for this small local test; Vue and network services a
 
 ## Verification status
 
-Automated checks cover the original 20 Cocos tests plus 41 Phase 2 tests: prompt validation, mocked fal transport, download bounds, grid coverage, background removal, connected-component filtering, normalization, canonical sheet ordering, and package ZIP contents. Twenty synthetic cases have also run through the standalone CLI successfully. See [Phase 2](docs/phase-2.md) for the verification record.
+Automated checks cover 23 Cocos tests (including three metadata-save regression tests) plus 41 Phase 2 tests: prompt validation, mocked fal transport, download bounds, grid coverage, background removal, connected-component filtering, normalization, canonical sheet ordering, and package ZIP contents. Twenty synthetic cases have also run through the standalone CLI successfully. See [Phase 2](docs/phase-2.md) for the verification record.
 
 The owner has confirmed Phase 1's manual Creator test. The AI model's visual quality has not been established by synthetic tests. This is not a production SaaS deployment.
-"# AssetAni" 
+"# AssetAni"

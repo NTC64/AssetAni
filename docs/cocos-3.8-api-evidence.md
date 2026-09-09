@@ -1,0 +1,17 @@
+# Cocos 3.8 API evidence and limitations
+
+Inspected on 2026-09-09. No installed Creator executable was found in checked common installation directories. The empty repository had no local editor API declarations or project. Official declarations were therefore inspected from [cocos/creator-types](https://github.com/cocos/creator-types/tree/f9460c0b5a9f3eb3eeb70ecaa734518bd5db613f), whose package version is 3.8.8. The package is also pinned as a development dependency.
+
+| Used boundary                                                                                                                                             | Official source inspected                              |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `query-ready`, `create-asset`, `import-asset`, `save-asset`, `save-asset-meta`, `reimport-asset`, `refresh-asset`, `query-asset-info`, `query-asset-meta` | `editor/packages/asset-db/@types/message.d.ts`         |
+| `overwrite`, `rename`, `subMetas`, `uuid`, `importer`, `userData`                                                                                         | `editor/packages/asset-db/@types/public.d.ts`          |
+| image type `sprite-frame`, `pivotX`, `pivotY`, `trimType`, nearest texture filters                                                                        | `editor/packages/engine-extends/@types/userDatas.d.ts` |
+| `EditorExtends.serialize(object)` → `string                                                                                                               | object`                                                | `editor/packages/engine/@types/editor-extends/index.d.ts` and `utils/serialize/index.d.ts` |
+| `AnimationClip.createWithSpriteFrames`, `AnimationClip.WrapMode`, `duration`, `assetManager.loadAny`                                                      | `engine/cc.d.ts`                                       |
+
+The npm package omits the editor-extends serializer declaration despite its presence in the official repository. A narrow local declaration reflects that inspected signature; no runtime implementation is substituted. The adapter checks availability and reports a failure if it is missing.
+
+The [3.8 scene-script documentation](https://docs.cocos.com/creator/3.8/manual/en/editor/extension/scene-script) documents `contributions.scene.script` and `scene:execute-scene-script` with `{ name, method, args }`. The [panel documentation](https://docs.cocos.com/creator/3.8/manual/en/editor/extension/panel.html) documents panel registration and `Editor.Panel.define/open`. The [AnimationClip reference](https://docs.cocos.com/creator/3.8/api/en/class/AnimationClip) documents sprite-frame clip creation.
+
+Declarations do not prove runtime compatibility. In particular, SpriteFrame metadata reimport, scene load/cache behavior, serialized asset references, and playback must be verified on the target Creator patch. All those calls are isolated in the 3.8 adapter, including panel registration and extension messaging. No 2.x `Editor.assetdb` calls or guessed UUID suffixes are used.

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "generationId": "01996aaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  "animation": "walk",
+  "direction": "right",
+  "fps": 12,
+  "loop": true,
+  "frameCount": 8,
+  "frameSize": 256,
+  "pivot": {
+    "x": 0.5,
+    "y": 0
+  },
+  "frames": [
+    "frames/frame_00.png",
+    "frames/frame_01.png",
+    "frames/frame_02.png",
+    "frames/frame_03.png",
+    "frames/frame_04.png",
+    "frames/frame_05.png",
+    "frames/frame_06.png",
+    "frames/frame_07.png"
+  ]
+}

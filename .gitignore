@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.reference/
+.env
+coverage/
+.pnpm-store/
+.npm-cache/
+*.tsbuildinfo
+artifacts/ai-poc/

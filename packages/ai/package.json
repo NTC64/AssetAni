@@ -1,0 +1,11 @@
+{
+  "name": "@sprite/ai",
+  "private": true,
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@fal-ai/client": "1.10.1",
+    "sharp": "0.35.4",
+    "zod": "3.25.76"
+  }
+}

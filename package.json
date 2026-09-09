@@ -1,0 +1,36 @@
+{
+  "name": "ai-sprite-generator",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "fixtures": "node scripts/create-fixtures.mjs",
+    "lint": "eslint apps packages tests scripts/**/*.ts && prettier --check .",
+    "test:ai": "node scripts/run-ai.mjs",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@sprite/ai": "workspace:*",
+    "@sprite/image": "workspace:*",
+    "@sprite/contracts": "workspace:*",
+    "sharp": "0.35.4",
+    "zod": "3.25.76",
+    "fflate": "0.8.3",
+    "@cocos/creator-types": "3.8.8",
+    "@eslint/js": "9.39.2",
+    "@types/node": "22.19.7",
+    "esbuild": "0.25.12",
+    "eslint": "9.39.2",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.53.1",
+    "vitest": "3.2.4"
+  }
+}

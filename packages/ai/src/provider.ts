@@ -12,10 +12,17 @@ export interface GeneratedSpriteSheet {
   requestId: string;
   durationMs: number;
 }
+export interface AiGenerationOptions {
+  /** Adds the one permitted corrective layout instruction after validation failure. */
+  strictLayoutRetry?: boolean;
+}
 export interface AiProvider {
   readonly name: 'fake' | 'fal';
   readonly model: string;
-  generate(input: GenerationInput): Promise<GeneratedSpriteSheet>;
+  generate(
+    input: GenerationInput,
+    options?: AiGenerationOptions,
+  ): Promise<GeneratedSpriteSheet>;
 }
 export class AiProviderError extends Error {
   constructor(

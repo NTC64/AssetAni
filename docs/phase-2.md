@@ -1,6 +1,6 @@
 # Phase 2: AI sprite POC and image processing
 
-Scope: standalone server-side generation and local image processing only. Phase 1 was manually verified by the owner. Phase 2's implementation and offline flow are verified; **real fal.ai generation and human review of at least 20 real outputs are pending** because FAL_KEY was not configured in this workspace. Stop after Phase 2.
+Scope: standalone server-side generation and local image processing only. Phase 1 was manually verified by the owner. Phase 2's implementation and offline flow are verified. The real `walk`/`idle`/`attack` fal.ai preflight gate was run and failed, so the 20-image quality suite remains blocked. Stop after Phase 2.
 
 ## Install and verify
 
@@ -98,7 +98,11 @@ The manifest controls ordering, FPS, animation, loop and pivot. Phase 2 uses `fr
 
 `packages/image` uses Sharp and accepts a single 1024 × 1024 PNG up to 16 MiB. The grid helper supports non-divisible dimensions with rounded boundaries; the production-facing MVP entry point still requires the specified 1024-square input. Each 4×2 source cell is 256×512.
 
-RGBA masking uses Euclidean distance from RGB(244,244,244): distance ≤18 removes alpha, distance ≥35 preserves source alpha, and values between interpolate multiplicatively. Source alpha below 16 becomes transparent. An 8-connected component scan removes components smaller than `max(64, cellWidth*cellHeight*0.0005)` pixels. Bounds include all remaining components. Blank cells fail rather than producing an apparently successful blank animation.
+Before masking, validation requires at least 55% of all pixels and 90% of the outer eight-pixel border to be within distance 18 of RGB(244,244,244), or already transparent. It also flood-fills background-like pixels (distance at most 60) from the canvas edge and requires their RGB-distance standard deviation to be at most 3. This catches subtle gradients whose corners look correct but whose interior is not flat. A failure returns `INVALID_BACKGROUND`.
+
+RGBA masking then uses Euclidean distance from RGB(244,244,244): distance ≤18 removes alpha, distance ≥35 preserves source alpha, and values between interpolate multiplicatively. Source alpha below 16 becomes transparent. An 8-connected component scan removes components smaller than `max(64, cellWidth*cellHeight*0.0005)` pixels. Bounds include all remaining components. Blank cells fail. If surviving foreground touches any fixed 4x2 cell boundary, the entire sheet returns `INVALID_GRID`; this catches extra rows, overlap and clipping rather than packaging crossed cells.
+
+For `INVALID_BACKGROUND`, `INVALID_GRID`, or an empty frame, the POC performs exactly one additional provider call using the same generation input and seed plus: `CRITICAL: output exactly 8 isolated frames in a strict 4x2 grid.` Both raw attempts and validation details are retained. A second validation failure ends as FAILED and no manifest, normalized sheet, frames, or ZIP are written. Provider/network failures are not generation-level retried by the runner. The fal SDK may still perform its own transport retries.
 
 Each foreground is independently scaled by `min(240/width, 240/height)` with nearest-neighbor resizing. Rounded output dimensions remain at most 240×240. It is horizontally centered (at most one pixel imbalance from integer rounding) and placed at `y = 256 - scaledHeight - 8`. PNG compression is level 9 with adaptive filtering. The canonical sheet preserves row-major frame order.
 
@@ -111,7 +115,7 @@ Each foreground is independently scaled by `min(240/width, 240/height)` with nea
 5. Open frames/00.png … 07.png in order; confirm transparency, 256×256 size, no clipping, horizontal centering and 8px bottom margin. Review timing at manifest FPS in an external animation viewer if useful. This phase does not connect the generated package to the Cocos panel.
 6. Summarize acceptance/rejection counts and recurring failures in the run's REVIEW.md. The owner must judge whether visual consistency and poses are useful enough. No pass threshold is invented here.
 
-Known limitations: flat-color removal can erase similarly colored character details; tiny legitimate disconnected details may be removed as noise; cell normalization can amplify inconsistent source proportions; foreground touching an edge may already be clipped. The pipeline does not detect semantic pose count or repair malformed AI layouts. There is no automatic paid regeneration or application-level retry/fallback policy in Phase 2. All model output remains untrusted input.
+Known limitations: flat-color removal can erase similarly colored character details; tiny legitimate disconnected details may be removed as noise; cell normalization can amplify inconsistent source proportions; foreground touching an edge may already be clipped. Fixed-cell boundary checks detect structural violations but cannot prove semantic pose count. The pipeline rejects malformed AI layouts and retries them once; it does not repair them or switch models. All model output remains untrusted input.
 
 ## Source verification
 
@@ -121,11 +125,12 @@ Downloads accept HTTPS provider locations on fal.media (including subdomains) an
 
 ## Verification record
 
-- 61 automated tests passed: 20 existing Cocos tests and 41 new Phase 2 tests. Tests use fake providers/injected transport and consume no paid calls.
+- 71 automated tests passed. Tests use fake providers/injected transport and consume no paid calls.
 - 20/20 fake-provider cases completed through the actual CLI, Sharp pipeline, manifest generation and ZIP export.
 - Example retained run: `artifacts/ai-poc/fake-2026-09-09T11-14-21-600Z-374449bc/`.
 - One normalized fake sheet was visually inspected; the full batch is available for review.
-- Final verification passed on Node 22.23.2 / pnpm 10.28.2: frozen-lockfile install, ESLint/Prettier, strict typecheck, all 61 tests, and both extension/POC builds. The compiled CLI help and missing-FAL_KEY failure path were also checked; no real provider call was submitted.
-- Real fal.ai execution: NOT RUN (FAL_KEY unavailable). Real 20-sheet model-quality acceptance: PENDING.
+- Final verification passed on the local Node/pnpm toolchain: ESLint/Prettier, strict typecheck, all 71 tests, and both extension/POC builds.
+- Real fal.ai preflight: 0/3 animation gates passed after six paid calls. Each case retried exactly once, all invalid outputs were rejected, and no invalid package was generated. Evidence is in `artifacts/ai-poc/professional-gate-v2/PHASE_2_GATE_REPORT.md`.
+- Real 20-sheet model-quality acceptance: BLOCKED by the failed preflight gate.
 
 No Phase 3 work or excluded commercial/storage/infrastructure features have been implemented.

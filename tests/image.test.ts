@@ -6,6 +6,7 @@ import {
   cleanForeground,
   normalizeFrame,
   processSpriteSheet,
+  inspectBackground,
 } from '../packages/image/src';
 import { createFakeProvider } from '../packages/ai/src/fake-provider';
 
@@ -66,6 +67,19 @@ describe('grid slicing', () => {
 });
 
 describe('flat-background removal and noise', () => {
+  it('measures both whole-image and border adherence to #F4F4F4', () => {
+    const rgba = Buffer.alloc(20 * 20 * 4, 244);
+    for (let i = 3; i < rgba.length; i += 4) rgba[i] = 255;
+    expect(inspectBackground(rgba, 20, 20)).toMatchObject({
+      corePixelRatio: 1,
+      coreBorderRatio: 1,
+      connectedBackgroundMeanDistance: 0,
+      connectedBackgroundStandardDeviation: 0,
+      coreDistance: 18,
+      connectedDistance: 60,
+      borderWidth: 8,
+    });
+  });
   it('removes #F4F4F4, interpolates edge alpha, and preserves foreground alpha', () => {
     const source = Buffer.from([
       244, 244, 244, 255, 226, 244, 244, 255, 219, 244, 244, 255, 209, 244, 244,
@@ -194,6 +208,84 @@ describe('normalization', () => {
     ).rejects.toMatchObject({
       code: 'EMPTY_FRAME',
       message: expect.stringContaining('Frame 0'),
+    });
+  });
+  it('rejects a non-flat provider background before normalization', async () => {
+    const gradientLike = await sharp({
+      create: {
+        width: 1024,
+        height: 1024,
+        channels: 4,
+        background: { r: 226, g: 232, b: 236, alpha: 1 },
+      },
+    })
+      .png()
+      .toBuffer();
+    await expect(
+      processSpriteSheet({ inputBuffer: gradientLike }),
+    ).rejects.toMatchObject({
+      code: 'INVALID_BACKGROUND',
+      details: {
+        corePixelRatio: 0,
+        coreBorderRatio: 0,
+      },
+    });
+  });
+  it('rejects subtle interior background variation even when the border and core ratios pass', async () => {
+    const width = 1024;
+    const height = 1024;
+    const rgba = Buffer.alloc(width * height * 4);
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        const border = x < 8 || y < 8 || x >= width - 8 || y >= height - 8;
+        const value = border ? 244 : 232 + Math.round((12 * y) / (height - 1));
+        rgba.set([value, value, value, 255], (y * width + x) * 4);
+      }
+    const subtleGradient = await sharp(rgba, {
+      raw: { width, height, channels: 4 },
+    })
+      .png()
+      .toBuffer();
+    await expect(
+      processSpriteSheet({ inputBuffer: subtleGradient }),
+    ).rejects.toMatchObject({
+      code: 'INVALID_BACKGROUND',
+      details: {
+        corePixelRatio: expect.any(Number),
+        coreBorderRatio: 1,
+        connectedBackgroundStandardDeviation: expect.any(Number),
+      },
+    });
+  });
+  it('rejects foreground crossing fixed 4x2 cell boundaries', async () => {
+    const rectangles = Array.from({ length: 4 }, (_, column) => ({
+      input: {
+        create: {
+          width: 80,
+          height: 120,
+          channels: 4 as const,
+          background: { r: 180, g: 20, b: 40, alpha: 1 },
+        },
+      },
+      left: column * 256 + 88,
+      top: 452,
+    }));
+    const crossing = await sharp({
+      create: {
+        width: 1024,
+        height: 1024,
+        channels: 4,
+        background: '#F4F4F4',
+      },
+    })
+      .composite(rectangles)
+      .png()
+      .toBuffer();
+    await expect(
+      processSpriteSheet({ inputBuffer: crossing }),
+    ).rejects.toMatchObject({
+      code: 'INVALID_GRID',
+      details: { touchingFrames: expect.arrayContaining([0, 4]) },
     });
   });
 });

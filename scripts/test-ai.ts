@@ -85,7 +85,9 @@ async function main() {
         2,
       ),
     );
-    console.log(`${index + 1}/${count} ${result.status}: ${result.outputPath}`);
+    console.log(
+      `${index + 1}/${count} ${result.status} (${result.attemptCount} attempt${result.attemptCount === 1 ? '' : 's'}): ${result.outputPath}`,
+    );
   }
   const csv = [
     'testNumber,directory,exactlyEightFrames,correctGrid,sameCharacter,noOverlap,usefulPoses,notes',
@@ -99,10 +101,21 @@ async function main() {
     path.join(outputRoot, 'REVIEW.md'),
     `# ${providerName} POC review\n\nFill review.csv after inspecting both raw and normalized sheets. PROCESSED means only that image processing succeeded. Fake sheets do not evaluate AI quality.\n\n` +
       results
-        .map(
-          (result) =>
-            `## Case ${result.testNumber}: ${result.status}\n\n![Raw](${path.basename(result.outputPath)}/raw.png)\n\n![Normalized](${path.basename(result.outputPath)}/sheet.png)\n`,
-        )
+        .map((result) => {
+          const directory = path.basename(result.outputPath);
+          const attempts = result.attempts
+            .filter((attempt) => attempt.status !== 'FAILED')
+            .map(
+              (attempt) =>
+                `![Raw attempt ${attempt.attempt}](${directory}/raw-attempt-${attempt.attempt}.png)`,
+            )
+            .join('\n\n');
+          const normalized =
+            result.status === 'PROCESSED'
+              ? `\n\n![Accepted raw](${directory}/raw.png)\n\n![Normalized](${directory}/sheet.png)`
+              : '';
+          return `## Case ${result.testNumber}: ${result.status} (${result.attemptCount} attempt${result.attemptCount === 1 ? '' : 's'})\n\n${attempts}${normalized}\n`;
+        })
         .join('\n'),
   );
   console.log(`Review: ${path.join(outputRoot, 'REVIEW.md')}`);

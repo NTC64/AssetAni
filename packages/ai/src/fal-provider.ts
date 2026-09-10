@@ -114,7 +114,7 @@ export function createFalProvider(options: {
   return {
     name: 'fal',
     model,
-    async generate(rawInput) {
+    async generate(rawInput, generationOptions = {}) {
       const { seed, ...promptInput } = generationInputSchema.parse(rawInput);
       const start = performance.now();
       const signal = AbortSignal.timeout(120_000);
@@ -123,7 +123,7 @@ export function createFalProvider(options: {
         rawResult = await transport(
           model,
           {
-            prompt: buildSpritePrompt(promptInput),
+            prompt: buildSpritePrompt(promptInput, generationOptions),
             image_size: { width: 1024, height: 1024 },
             num_images: 1,
             output_format: 'png',

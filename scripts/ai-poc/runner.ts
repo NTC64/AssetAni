@@ -8,7 +8,11 @@ import {
   buildSpritePrompt,
   generationInputSchema,
 } from '@sprite/ai';
-import { createSpritePackage, processSpriteSheet } from '@sprite/image';
+import {
+  createSpritePackage,
+  processSpriteSheet,
+  SpriteProcessingError,
+} from '@sprite/image';
 import { z } from 'zod';
 
 export async function runPocCase(
@@ -35,7 +39,6 @@ export async function runPocCase(
   );
   await mkdir(outputPath, { recursive: true });
   const started = performance.now();
-  let generated: GeneratedSpriteSheet | undefined;
   const base = {
     testNumber: settings.testNumber,
     generationId,
@@ -52,10 +55,97 @@ export async function runPocCase(
     outputPath,
     createdAt: new Date().toISOString(),
   };
-  try {
-    generated = await provider.generate(parsedInput);
+  const attempts: Array<Record<string, unknown>> = [];
+  let selected:
+    | {
+        generated: GeneratedSpriteSheet;
+        result: Awaited<ReturnType<typeof processSpriteSheet>>;
+      }
+    | undefined;
+  let lastGenerated: GeneratedSpriteSheet | undefined;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const strictLayoutRetry = attempt === 2;
+    const effectivePrompt = buildSpritePrompt(
+      {
+        prompt: parsedInput.prompt,
+        animation: parsedInput.animation,
+        direction: 'right',
+        frameCount: 8,
+      },
+      { strictLayoutRetry },
+    );
+    try {
+      const generated = await provider.generate(parsedInput, {
+        strictLayoutRetry,
+      });
+      lastGenerated = generated;
+      await writeFile(
+        path.join(outputPath, `raw-attempt-${attempt}.png`),
+        generated.image,
+      );
+      try {
+        const result = await processSpriteSheet({
+          inputBuffer: generated.image,
+        });
+        attempts.push({
+          attempt,
+          strictLayoutRetry,
+          status: 'ACCEPTED',
+          seed: generated.seed,
+          model: generated.model,
+          requestId: generated.requestId,
+          providerDurationMs: generated.durationMs,
+          effectivePrompt,
+          validation: { background: result.background },
+        });
+        selected = { generated, result };
+        break;
+      } catch (error: unknown) {
+        lastError = error;
+        attempts.push({
+          attempt,
+          strictLayoutRetry,
+          status: 'REJECTED',
+          seed: generated.seed,
+          model: generated.model,
+          requestId: generated.requestId,
+          providerDurationMs: generated.durationMs,
+          effectivePrompt,
+          errorCode:
+            error instanceof SpriteProcessingError
+              ? error.code
+              : 'PROCESSING_FAILED',
+          error: error instanceof Error ? error.message : 'Processing failed.',
+          validation:
+            error instanceof SpriteProcessingError ? error.details : undefined,
+        });
+        const retryableStructureFailure =
+          error instanceof SpriteProcessingError &&
+          ['INVALID_BACKGROUND', 'INVALID_GRID', 'EMPTY_FRAME'].includes(
+            error.code,
+          );
+        if (attempt === 1 && retryableStructureFailure) continue;
+        break;
+      }
+    } catch (error: unknown) {
+      lastError = error;
+      attempts.push({
+        attempt,
+        strictLayoutRetry,
+        status: 'FAILED',
+        seed: null,
+        model: provider.model,
+        requestId: null,
+        effectivePrompt,
+        error: error instanceof Error ? error.message : 'Provider failed.',
+      });
+      break;
+    }
+  }
+  if (selected) {
+    const { generated, result } = selected;
     await writeFile(path.join(outputPath, 'raw.png'), generated.image);
-    const result = await processSpriteSheet({ inputBuffer: generated.image });
     const packaged = createSpritePackage(result, {
       generationId,
       animation: input.animation,
@@ -75,6 +165,10 @@ export async function runPocCase(
       durationMs: performance.now() - started,
       providerDurationMs: generated.durationMs,
       diagnostics: result.diagnostics,
+      background: result.background,
+      attemptCount: attempts.length,
+      retried: attempts.length === 2,
+      attempts,
       qualityReview: {
         status: 'PENDING',
         exactlyEightFrames: null,
@@ -89,20 +183,27 @@ export async function runPocCase(
       JSON.stringify(metadata, null, 2),
     );
     return metadata;
-  } catch (error: unknown) {
-    const metadata = {
-      ...base,
-      status: 'FAILED',
-      seed: generated?.seed ?? null,
-      model: generated?.model ?? provider.model,
-      requestId: generated?.requestId ?? null,
-      durationMs: performance.now() - started,
-      error: error instanceof Error ? error.message : 'Unknown POC failure',
-    };
-    await writeFile(
-      path.join(outputPath, 'metadata.json'),
-      JSON.stringify(metadata, null, 2),
-    );
-    return metadata;
   }
+  const metadata = {
+    ...base,
+    status: 'FAILED',
+    seed: lastGenerated?.seed ?? null,
+    model: lastGenerated?.model ?? provider.model,
+    requestId: lastGenerated?.requestId ?? null,
+    durationMs: performance.now() - started,
+    attemptCount: attempts.length,
+    retried: attempts.length === 2,
+    attempts,
+    errorCode:
+      lastError instanceof SpriteProcessingError
+        ? lastError.code
+        : 'GENERATION_FAILED',
+    error:
+      lastError instanceof Error ? lastError.message : 'Unknown POC failure',
+  };
+  await writeFile(
+    path.join(outputPath, 'metadata.json'),
+    JSON.stringify(metadata, null, 2),
+  );
+  return metadata;
 }

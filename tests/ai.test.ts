@@ -32,6 +32,14 @@ describe('sprite prompt', () => {
       buildSpritePrompt({ ...promptInput, prompt: '{{ANIMATION}} $& $`' }),
     ).toContain('SUBJECT:\n{{ANIMATION}} $& $`\n');
   });
+  it('appends the critical instruction only for a strict retry', () => {
+    const first = buildSpritePrompt(promptInput);
+    const retry = buildSpritePrompt(promptInput, { strictLayoutRetry: true });
+    expect(first).not.toContain('CRITICAL:');
+    expect(retry).toBe(
+      `${first}\n\nCRITICAL: output exactly 8 isolated frames in a strict 4x2 grid.`,
+    );
+  });
   it('counts Unicode code points rather than bytes or UTF-16 units', () => {
     expect(() =>
       buildSpritePrompt({ ...promptInput, prompt: '🦊'.repeat(800) }),

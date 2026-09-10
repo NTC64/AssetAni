@@ -18,7 +18,10 @@ export const spritePromptSchema = z
   .strict();
 export type SpritePromptInput = z.infer<typeof spritePromptSchema>;
 
-export function buildSpritePrompt(input: SpritePromptInput): string {
+export function buildSpritePrompt(
+  input: SpritePromptInput,
+  options: { strictLayoutRetry?: boolean } = {},
+): string {
   const { prompt, animation, direction, frameCount } =
     spritePromptSchema.parse(input);
   return `Create a clean 2D pixel-art sprite animation sheet.
@@ -52,5 +55,9 @@ No text.
 No labels.
 No borders.
 
-The frames must represent consecutive poses of one smooth animation cycle.`;
+The frames must represent consecutive poses of one smooth animation cycle.${
+    options.strictLayoutRetry
+      ? '\n\nCRITICAL: output exactly 8 isolated frames in a strict 4x2 grid.'
+      : ''
+  }`;
 }

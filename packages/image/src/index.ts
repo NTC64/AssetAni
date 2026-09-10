@@ -13,12 +13,118 @@ export const PNG_OPTIONS = {
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 export class SpriteProcessingError extends Error {
   constructor(
-    public readonly code: 'INVALID_IMAGE' | 'EMPTY_FRAME',
+    public readonly code:
+      | 'INVALID_IMAGE'
+      | 'INVALID_BACKGROUND'
+      | 'INVALID_GRID'
+      | 'EMPTY_FRAME',
     message: string,
+    public readonly details?: object,
   ) {
     super(message);
     this.name = 'SpriteProcessingError';
   }
+}
+
+export interface BackgroundDiagnostics {
+  corePixelRatio: number;
+  coreBorderRatio: number;
+  connectedBackgroundMeanDistance: number;
+  connectedBackgroundStandardDeviation: number;
+  coreDistance: 18;
+  connectedDistance: 60;
+  borderWidth: 8;
+}
+
+/** Conservative contract check: the requested background must dominate and remain flat from the canvas edge inward. */
+export function inspectBackground(
+  rgba: Buffer,
+  width: number,
+  height: number,
+): BackgroundDiagnostics {
+  if (rgba.length !== width * height * 4)
+    throw new Error('RGBA dimensions do not match buffer.');
+  let corePixels = 0;
+  let borderPixels = 0;
+  let coreBorderPixels = 0;
+  const borderWidth = 8;
+  const pixelCount = width * height;
+  const distances = new Float32Array(pixelCount);
+  const connectedCandidates = new Uint8Array(pixelCount);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4;
+      const transparent = rgba[offset + 3]! < 16;
+      const distance = transparent
+        ? 0
+        : Math.hypot(
+            rgba[offset]! - 244,
+            rgba[offset + 1]! - 244,
+            rgba[offset + 2]! - 244,
+          );
+      distances[y * width + x] = distance;
+      const core = transparent || distance <= 18;
+      if (transparent || distance <= 60) connectedCandidates[y * width + x] = 1;
+      if (core) corePixels++;
+      if (
+        x < borderWidth ||
+        y < borderWidth ||
+        x >= width - borderWidth ||
+        y >= height - borderWidth
+      ) {
+        borderPixels++;
+        if (core) coreBorderPixels++;
+      }
+    }
+
+  // Follow background-like pixels from the image edge. This measures variation in
+  // the actual background region without counting isolated light character detail.
+  const visited = new Uint8Array(pixelCount);
+  const queue = new Int32Array(pixelCount);
+  let head = 0;
+  let tail = 0;
+  const enqueue = (index: number) => {
+    if (connectedCandidates[index] && !visited[index]) {
+      visited[index] = 1;
+      queue[tail++] = index;
+    }
+  };
+  for (let x = 0; x < width; x++) {
+    enqueue(x);
+    enqueue((height - 1) * width + x);
+  }
+  for (let y = 1; y < height - 1; y++) {
+    enqueue(y * width);
+    enqueue(y * width + width - 1);
+  }
+  let distanceSum = 0;
+  let squaredDistanceSum = 0;
+  while (head < tail) {
+    const index = queue[head++]!;
+    const x = index % width;
+    const y = Math.floor(index / width);
+    const distance = distances[index]!;
+    distanceSum += distance;
+    squaredDistanceSum += distance * distance;
+    if (x > 0) enqueue(index - 1);
+    if (x + 1 < width) enqueue(index + 1);
+    if (y > 0) enqueue(index - width);
+    if (y + 1 < height) enqueue(index + width);
+  }
+  const mean = tail === 0 ? Number.POSITIVE_INFINITY : distanceSum / tail;
+  const variance =
+    tail === 0
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, squaredDistanceSum / tail - mean * mean);
+  return {
+    corePixelRatio: corePixels / pixelCount,
+    coreBorderRatio: coreBorderPixels / borderPixels,
+    connectedBackgroundMeanDistance: mean,
+    connectedBackgroundStandardDeviation: Math.sqrt(variance),
+    coreDistance: 18,
+    connectedDistance: 60,
+    borderWidth,
+  };
 }
 
 export async function normalizeFrame(inputBuffer: Buffer) {
@@ -81,10 +187,12 @@ const processSchema = z
 
 export async function processSpriteSheet(input: z.input<typeof processSchema>) {
   const { inputBuffer, rows, columns } = processSchema.parse(input);
+  let source: Buffer;
   try {
-    const metadata = await sharp(inputBuffer, {
+    const decoded = sharp(inputBuffer, {
       limitInputPixels: 1024 * 1024,
-    }).metadata();
+    });
+    const metadata = await decoded.metadata();
     if (
       metadata.format !== 'png' ||
       metadata.width !== 1024 ||
@@ -93,10 +201,23 @@ export async function processSpriteSheet(input: z.input<typeof processSchema>) {
     ) {
       throw new Error('Expected a single 1024 x 1024 PNG.');
     }
+    source = await decoded.toColourspace('srgb').ensureAlpha().raw().toBuffer();
   } catch {
     throw new SpriteProcessingError(
       'INVALID_IMAGE',
       'Expected a valid single 1024 x 1024 PNG.',
+    );
+  }
+  const background = inspectBackground(source, 1024, 1024);
+  if (
+    background.corePixelRatio < 0.55 ||
+    background.coreBorderRatio < 0.9 ||
+    background.connectedBackgroundStandardDeviation > 3
+  ) {
+    throw new SpriteProcessingError(
+      'INVALID_BACKGROUND',
+      `Background is not sufficiently flat near #F4F4F4 (core ${(background.corePixelRatio * 100).toFixed(1)}%, border ${(background.coreBorderRatio * 100).toFixed(1)}%, connected deviation ${background.connectedBackgroundStandardDeviation.toFixed(2)}).`,
+      background,
     );
   }
   const frames: Buffer[] = [];
@@ -119,6 +240,16 @@ export async function processSpriteSheet(input: z.input<typeof processSchema>) {
       );
     }
   }
+  const touchingFrames = diagnostics
+    .map((frame, index) => (frame.touchesEdge ? index : -1))
+    .filter((index) => index >= 0);
+  if (touchingFrames.length > 0) {
+    throw new SpriteProcessingError(
+      'INVALID_GRID',
+      `Foreground touches a fixed 4x2 cell boundary in frame(s): ${touchingFrames.join(', ')}.`,
+      { touchingFrames, background },
+    );
+  }
   const sheet = await sharp({
     create: { width: 1024, height: 512, channels: 4, background: TRANSPARENT },
   })
@@ -131,5 +262,5 @@ export async function processSpriteSheet(input: z.input<typeof processSchema>) {
     )
     .png(PNG_OPTIONS)
     .toBuffer();
-  return { frames, sheet, diagnostics };
+  return { frames, sheet, diagnostics, background };
 }

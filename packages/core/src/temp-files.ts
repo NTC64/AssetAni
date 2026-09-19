@@ -4,7 +4,9 @@ import path from 'node:path';
 
 function spriteTempRoot() {
   const configured = process.env.SPRITE_TEMP_PATH?.trim();
-  return configured ? path.resolve(configured) : path.join(os.tmpdir(), 'sprite');
+  return configured
+    ? path.resolve(configured)
+    : path.join(os.tmpdir(), 'sprite');
 }
 
 export function generationTempDirectory(generationId: string) {

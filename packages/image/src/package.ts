@@ -7,17 +7,18 @@ export function createSpritePackage(
   settings: Pick<
     GenerationManifest,
     'generationId' | 'animation' | 'fps' | 'loop'
-  >,
+  > &
+    Partial<Pick<GenerationManifest, 'direction' | 'frameSize' | 'pivot'>>,
 ) {
   if (result.frames.length !== 8)
     throw new Error('A result package requires exactly eight frames.');
   const manifest = manifestSchema.parse({
     ...settings,
     version: 1,
-    direction: 'right',
+    direction: settings.direction ?? 'right',
     frameCount: 8,
-    frameSize: 256,
-    pivot: { x: 0.5, y: 0 },
+    frameSize: settings.frameSize ?? 256,
+    pivot: settings.pivot ?? { x: 0.5, y: 0 },
     frames: result.frames.map(
       (_, index) => `frames/${String(index).padStart(2, '0')}.png`,
     ),

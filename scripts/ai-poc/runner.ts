@@ -4,12 +4,15 @@ import path from 'node:path';
 import {
   type AiProvider,
   type GenerationInput,
-  type GeneratedSpriteSheet,
+  type GeneratedSpriteResult,
   buildSpritePrompt,
+  buildPixelLabMotionPrompt,
   generationInputSchema,
+  hasGeneratedFrames,
 } from '@sprite/ai';
 import {
   createSpritePackage,
+  processAnimationFrames,
   processSpriteSheet,
   SpriteProcessingError,
 } from '@sprite/image';
@@ -22,6 +25,7 @@ export async function runPocCase(
     outputRoot: string;
     testNumber: number;
     fps: number;
+    allowPaidRetry?: boolean;
   },
 ) {
   const settings = z
@@ -29,6 +33,7 @@ export async function runPocCase(
       outputRoot: z.string().min(1),
       testNumber: z.number().int().positive(),
       fps: z.number().int().min(4).max(30),
+      allowPaidRetry: z.boolean().default(false),
     })
     .parse(options);
   const parsedInput = generationInputSchema.parse(input);
@@ -46,35 +51,41 @@ export async function runPocCase(
     prompt: parsedInput.prompt,
     animation: parsedInput.animation,
     requestedSeed: parsedInput.seed,
-    effectivePrompt: buildSpritePrompt({
-      prompt: parsedInput.prompt,
-      animation: parsedInput.animation,
-      direction: 'right',
-      frameCount: 8,
-    }),
+    effectivePrompt:
+      provider.name === 'pixellab'
+        ? `${parsedInput.prompt}\n${buildPixelLabMotionPrompt(parsedInput.animation)}`
+        : buildSpritePrompt({
+            prompt: parsedInput.prompt,
+            animation: parsedInput.animation,
+            direction: 'right',
+            frameCount: 8,
+          }),
     outputPath,
     createdAt: new Date().toISOString(),
   };
   const attempts: Array<Record<string, unknown>> = [];
   let selected:
     | {
-        generated: GeneratedSpriteSheet;
+        generated: GeneratedSpriteResult;
         result: Awaited<ReturnType<typeof processSpriteSheet>>;
       }
     | undefined;
-  let lastGenerated: GeneratedSpriteSheet | undefined;
+  let lastGenerated: GeneratedSpriteResult | undefined;
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt++) {
     const strictLayoutRetry = attempt === 2;
-    const effectivePrompt = buildSpritePrompt(
-      {
-        prompt: parsedInput.prompt,
-        animation: parsedInput.animation,
-        direction: 'right',
-        frameCount: 8,
-      },
-      { strictLayoutRetry },
-    );
+    const effectivePrompt =
+      provider.name === 'pixellab'
+        ? `${parsedInput.prompt}\n${buildPixelLabMotionPrompt(parsedInput.animation)}`
+        : buildSpritePrompt(
+            {
+              prompt: parsedInput.prompt,
+              animation: parsedInput.animation,
+              direction: 'right',
+              frameCount: 8,
+            },
+            { strictLayoutRetry },
+          );
     try {
       const generated = await provider.generate(parsedInput, {
         strictLayoutRetry,
@@ -85,9 +96,18 @@ export async function runPocCase(
         generated.image,
       );
       try {
-        const result = await processSpriteSheet({
-          inputBuffer: generated.image,
-        });
+        const result = hasGeneratedFrames(generated)
+          ? await processAnimationFrames({
+              frames: generated.frames
+                .slice()
+                .sort((left, right) => left.index - right.index)
+                .map(({ buffer }) => buffer),
+              animation: parsedInput.animation,
+            })
+          : await processSpriteSheet({
+              inputBuffer: generated.image,
+              animation: parsedInput.animation,
+            });
         attempts.push({
           attempt,
           strictLayoutRetry,
@@ -97,7 +117,10 @@ export async function runPocCase(
           requestId: generated.requestId,
           providerDurationMs: generated.durationMs,
           effectivePrompt,
-          validation: { background: result.background },
+          validation: {
+            background: result.background,
+            animationQuality: result.animationQuality,
+          },
         });
         selected = { generated, result };
         break;
@@ -122,10 +145,19 @@ export async function runPocCase(
         });
         const retryableStructureFailure =
           error instanceof SpriteProcessingError &&
-          ['INVALID_BACKGROUND', 'INVALID_GRID', 'EMPTY_FRAME'].includes(
-            error.code,
-          );
-        if (attempt === 1 && retryableStructureFailure) continue;
+          [
+            'INVALID_BACKGROUND',
+            'INVALID_GRID',
+            'EMPTY_FRAME',
+            'INSUFFICIENT_MOTION',
+            'INCONSISTENT_CHARACTER',
+          ].includes(error.code);
+        if (
+          attempt === 1 &&
+          retryableStructureFailure &&
+          (provider.name === 'fake' || settings.allowPaidRetry)
+        )
+          continue;
         break;
       }
     } catch (error: unknown) {

@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { createFakeProvider, createFalProvider } from '@sprite/ai';
+import {
+  createFakeProvider,
+  createFalProvider,
+  createPixelLabProvider,
+} from '@sprite/ai';
 import { runPocCase } from './ai-poc/runner';
 import { POC_CASES } from './ai-poc/cases';
 
@@ -11,7 +15,7 @@ async function main() {
   const { values } = parseArgs({
     options: {
       provider: { type: 'string', default: 'fake' },
-      model: { type: 'string', default: 'turbo' },
+      model: { type: 'string', default: 'sprite' },
       prompt: { type: 'string' },
       animation: { type: 'string', default: 'walk' },
       seed: { type: 'string' },
@@ -19,17 +23,20 @@ async function main() {
       count: { type: 'string' },
       suite: { type: 'boolean', default: false },
       out: { type: 'string', default: 'artifacts/ai-poc' },
+      'auto-retry-paid-output': { type: 'boolean', default: false },
       help: { type: 'boolean' },
     },
   });
   if (values.help) {
     console.log(
-      'pnpm test:ai [--provider fake|fal] [--model turbo|schnell] [--prompt "..."] [--animation idle|walk|attack] [--seed 0] [--fps 12] [--count 1] [--suite] [--out artifacts/ai-poc]\nDefault: fake provider, one sheet. --suite uses 20 varied cases. fal requires FAL_KEY and consumes paid calls.',
+      'pnpm test:ai [--provider fake|pixellab|fal] [--model sprite|turbo|schnell] [--prompt "..."] [--animation idle|walk|attack] [--seed 0] [--fps 12] [--count 1] [--suite] [--out artifacts/ai-poc] [--auto-retry-paid-output]\nDefault: fake provider. PixelLab and fal calls consume provider credit and are never regenerated automatically unless --auto-retry-paid-output is explicit.',
     );
     return;
   }
-  const providerName = z.enum(['fake', 'fal']).parse(values.provider);
-  const model = z.enum(['turbo', 'schnell']).parse(values.model);
+  const providerName = z
+    .enum(['fake', 'fal', 'pixellab'])
+    .parse(values.provider);
+  const model = z.enum(['sprite', 'turbo', 'schnell']).parse(values.model);
   const animation = z.enum(['idle', 'walk', 'attack']).parse(values.animation);
   const fps = z.coerce.number().int().min(4).max(30).parse(values.fps);
   const count = z.coerce
@@ -48,10 +55,25 @@ async function main() {
     throw new Error(
       'Set FAL_KEY in the server-side environment before using --provider fal.',
     );
+  if (providerName === 'pixellab' && !process.env.PIXELLAB_API_TOKEN?.trim())
+    throw new Error(
+      'Set PIXELLAB_API_TOKEN in the server-side environment before using --provider pixellab.',
+    );
   const provider =
     providerName === 'fake'
       ? createFakeProvider()
-      : createFalProvider({ key: process.env.FAL_KEY!, model });
+      : providerName === 'fal'
+        ? createFalProvider({ key: process.env.FAL_KEY!, model })
+        : createPixelLabProvider({
+            token: process.env.PIXELLAB_API_TOKEN!,
+            baseUrl: process.env.PIXELLAB_BASE_URL,
+            pollIntervalMs: process.env.PIXELLAB_POLL_INTERVAL_MS
+              ? Number(process.env.PIXELLAB_POLL_INTERVAL_MS)
+              : undefined,
+            jobTimeoutMs: process.env.PIXELLAB_JOB_TIMEOUT_MS
+              ? Number(process.env.PIXELLAB_JOB_TIMEOUT_MS)
+              : undefined,
+          });
   const outputRoot = path.resolve(
     values.out,
     `${providerName}-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`,
@@ -74,13 +96,18 @@ async function main() {
         frameCount: 8,
         seed: seed === null ? null : (seed + index) % 4294967296,
       },
-      { outputRoot, testNumber: index + 1, fps },
+      {
+        outputRoot,
+        testNumber: index + 1,
+        fps,
+        allowPaidRetry: values['auto-retry-paid-output'],
+      },
     );
     results.push(result);
     await writeFile(
       path.join(outputRoot, 'index.json'),
       JSON.stringify(
-        { provider: providerName, requestedModel: model, results },
+        { provider: providerName, requestedModel: provider.model, results },
         null,
         2,
       ),

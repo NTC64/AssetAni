@@ -74,7 +74,7 @@ it('rejects a bad background, retries exactly once with the critical prompt, and
     const invalid = await sharp({
       create: {
         width: 1024,
-        height: 1024,
+        height: 512,
         channels: 4,
         background: '#101820',
       },
@@ -142,7 +142,7 @@ it('stops after one strict retry and never writes a result package when both lay
     const invalid = await sharp({
       create: {
         width: 1024,
-        height: 1024,
+        height: 512,
         channels: 4,
         background: '#101820',
       },
@@ -186,6 +186,55 @@ it('stops after one strict retry and never writes a result package when both lay
       'raw-attempt-1.png',
       'raw-attempt-2.png',
     ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('does not regenerate rejected fal output without explicit paid-retry opt-in', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'sprite-poc-'));
+  try {
+    const invalid = await sharp({
+      create: {
+        width: 1024,
+        height: 512,
+        channels: 4,
+        background: '#101820',
+      },
+    })
+      .png()
+      .toBuffer();
+    let calls = 0;
+    const provider: AiProvider = {
+      name: 'fal',
+      model: 'fal/injected-no-paid-call',
+      async generate() {
+        calls++;
+        return {
+          image: invalid,
+          seed: 1,
+          model: this.model,
+          requestId: 'injected',
+          durationMs: 1,
+        };
+      },
+    };
+    const result = await runPocCase(
+      provider,
+      {
+        prompt: 'knight',
+        animation: 'walk',
+        direction: 'right',
+        frameCount: 8,
+      },
+      { outputRoot: root, testNumber: 1, fps: 12 },
+    );
+    expect(calls).toBe(1);
+    expect(result).toMatchObject({
+      status: 'FAILED',
+      attemptCount: 1,
+      retried: false,
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

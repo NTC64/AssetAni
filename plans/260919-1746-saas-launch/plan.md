@@ -1,8 +1,15 @@
 # AssetRun SaaS launch plan
 
-Status: DRAFT — awaiting approval
+Status: SUPERSEDED on 2026-09-19 by [260919-2257-standalone-extension](../260919-2257-standalone-extension/plan.md)
 Created: 2026-09-19
 Goal: turn the working generation core into a paid, self-service SaaS.
+
+> **Superseded.** PixelLab's terms require contacting them before building a
+> service on their API or reselling it, and PixelLab sells to the same
+> customers directly. The product became a standalone Cocos extension where the
+> user supplies their own PixelLab key. This plan is kept because it records the
+> analysis behind that change, and because its Phase 01 defects (orphaned
+> generations, unbounded result storage) were real.
 
 ## Decisions already made
 

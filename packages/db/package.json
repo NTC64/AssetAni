@@ -1,0 +1,12 @@
+{
+  "name": "@sprite/db",
+  "private": true,
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@sprite/contracts": "workspace:*",
+    "@sprite/core": "workspace:*",
+    "drizzle-orm": "^0.44.7",
+    "pg": "^8.23.0"
+  }
+}

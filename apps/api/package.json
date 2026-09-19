@@ -1,0 +1,14 @@
+{
+  "name": "@sprite/api",
+  "private": true,
+  "version": "0.1.0",
+  "main": "src/server.ts",
+  "dependencies": {
+    "@sprite/contracts": "workspace:*",
+    "@sprite/core": "workspace:*",
+    "@sprite/db": "workspace:*",
+    "@sprite/queue": "workspace:*",
+    "fastify": "^5.12.3",
+    "zod": "3.25.76"
+  }
+}

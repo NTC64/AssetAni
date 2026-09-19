@@ -1,0 +1,11 @@
+{
+  "name": "@sprite/queue",
+  "private": true,
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "dependencies": {
+    "bullmq": "^5.81.4",
+    "ioredis": "^5.11.1",
+    "zod": "3.25.76"
+  }
+}

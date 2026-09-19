@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789038000000,
+      "tag": "0000_phase3_generations",
+      "breakpoints": false
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789120800000,
+      "tag": "0001_phase5_auth_credits",
+      "breakpoints": false
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789196400000,
+      "tag": "0002_characters_batches",
+      "breakpoints": false
+    }
+  ]
+}

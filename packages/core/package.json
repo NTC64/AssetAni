@@ -1,0 +1,11 @@
+{
+  "name": "@sprite/core",
+  "private": true,
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@sprite/contracts": "workspace:*",
+    "@sprite/image": "workspace:*",
+    "zod": "3.25.76"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@sprite/worker",
+  "private": true,
+  "version": "0.1.0",
+  "main": "src/worker.ts",
+  "dependencies": {
+    "@sprite/ai": "workspace:*",
+    "@sprite/contracts": "workspace:*",
+    "@sprite/core": "workspace:*",
+    "@sprite/db": "workspace:*",
+    "@sprite/image": "workspace:*",
+    "@sprite/queue": "workspace:*",
+    "zod": "3.25.76"
+  }
+}

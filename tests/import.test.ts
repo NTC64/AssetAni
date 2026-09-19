@@ -152,6 +152,34 @@ describe('scene animation construction with a fake engine', () => {
       }
     },
   );
+  it('holds anticipation, impact, and recovery frames in an attack clip', async () => {
+    const fake = setup();
+    const serialized = await fake.methods.buildAnimation({
+      manifest: { ...manifest, animation: 'attack', loop: false },
+      uuids: manifest.frames,
+    });
+    expect(fake.create).toHaveBeenCalledWith(
+      [
+        fake.frames[0],
+        fake.frames[0],
+        fake.frames[1],
+        fake.frames[2],
+        fake.frames[3],
+        fake.frames[4],
+        fake.frames[4],
+        fake.frames[5],
+        fake.frames[6],
+        fake.frames[7],
+        fake.frames[7],
+      ],
+      12,
+    );
+    expect(JSON.parse(serialized)).toMatchObject({
+      name: 'attack',
+      duration: 11 / 12,
+      wrapMode: 1,
+    });
+  });
   it('releases already loaded frames on engine failure and does not serialize a partial clip', async () => {
     const fake = setup(3);
     await expect(

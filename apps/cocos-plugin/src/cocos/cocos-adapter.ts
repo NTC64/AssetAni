@@ -11,5 +11,6 @@ export interface CocosAdapter {
   createAnimation(
     destination: string,
     manifest: GenerationManifest,
+    animationUrl?: string,
   ): Promise<void>;
 }

@@ -40,11 +40,20 @@ const metaSchema = z
   .passthrough();
 
 function assertDestination(destination: string) {
-  if (!/^db:\/\/assets\/AI_Sprites\/[a-zA-Z0-9_-]+$/.test(destination)) {
+  if (!/^db:\/\/assets\/AI_Sprites(?:\/[a-zA-Z0-9_-]+)+$/.test(destination)) {
     throw new Error(
       'Import destination must be a child of db://assets/AI_Sprites.',
     );
   }
+}
+
+function assertAnimationUrl(url: string) {
+  if (
+    !/^db:\/\/assets\/AI_Sprites(?:\/[a-zA-Z0-9_-]+)+\/[a-zA-Z0-9_-]+\.anim$/.test(
+      url,
+    )
+  )
+    throw new Error('Animation URL must remain under db://assets/AI_Sprites.');
 }
 
 /** Cocos 3.8.8 declarations verified; runtime behavior must also pass PHASE_1_TEST.md. */
@@ -141,7 +150,11 @@ export function createCocos38Adapter(
       assertDestination(url);
       await db('refresh-asset', url);
     },
-    async createAnimation(destination: string, input: GenerationManifest) {
+    async createAnimation(
+      destination: string,
+      input: GenerationManifest,
+      requestedAnimationUrl?: string,
+    ) {
       assertDestination(destination);
       const manifest = manifestSchema.parse(input);
       const uuids: string[] = [];
@@ -173,7 +186,16 @@ export function createCocos38Adapter(
           }),
         );
       JSON.parse(serialized); // Refuse malformed scene-script output before writing an asset.
-      const url = `${destination}/${manifest.animation}.anim`;
+      const url =
+        requestedAnimationUrl ?? `${destination}/${manifest.animation}.anim`;
+      assertAnimationUrl(url);
+      if (requestedAnimationUrl)
+        await folder(
+          requestedAnimationUrl.slice(
+            0,
+            requestedAnimationUrl.lastIndexOf('/'),
+          ),
+        );
       await put(url, serialized);
       await db('refresh-asset', url);
       const clip = infoSchema.parse(await db('query-asset-info', url));
@@ -220,12 +242,34 @@ export function createSceneMethods(
           frame.addRef();
           frames.push(frame);
         }
-        const clip = AnimationClip.createWithSpriteFrames(frames, manifest.fps);
+        // Attack animation reads better when anticipation, impact, and recovery
+        // have a short hold. Source assets remain eight frames; only clip timing
+        // expands, so imports stay deterministic and no synthetic blur is added.
+        const playbackFrames =
+          manifest.animation === 'attack'
+            ? [
+                frames[0]!,
+                frames[0]!,
+                frames[1]!,
+                frames[2]!,
+                frames[3]!,
+                frames[4]!,
+                frames[4]!,
+                frames[5]!,
+                frames[6]!,
+                frames[7]!,
+                frames[7]!,
+              ]
+            : frames;
+        const clip = AnimationClip.createWithSpriteFrames(
+          playbackFrames,
+          manifest.fps,
+        );
         clip.name = manifest.animation;
         clip.wrapMode = manifest.loop
           ? AnimationClip.WrapMode.Loop
           : AnimationClip.WrapMode.Normal;
-        clip.duration = manifest.frameCount / manifest.fps;
+        clip.duration = playbackFrames.length / manifest.fps;
         const serialized = serialize(clip);
         return z
           .string()

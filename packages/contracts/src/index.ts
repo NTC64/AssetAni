@@ -85,6 +85,16 @@ export const generationRequestSchema = z
   .strict();
 export type GenerationRequest = z.infer<typeof generationRequestSchema>;
 
+// Skeleton-driven "precise" animation is defined but not implemented: the
+// orchestrator still fakes keypoint motion, so requests are rejected at the
+// API boundary instead of charging a credit for unusable frames.
+export const animationModeSchema = z
+  .enum(['standard', 'precise'])
+  .refine((mode) => mode !== 'precise', {
+    message: 'Precise animation mode is not supported yet.',
+  })
+  .default('standard');
+
 export const createCharacterRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(80),
@@ -102,7 +112,7 @@ export type CreateCharacterRequest = z.infer<
 export const characterAnimationRequestSchema = z
   .object({
     animation: animationTypeSchema,
-    mode: z.enum(['standard', 'precise']).default('standard'),
+    mode: animationModeSchema,
     direction: spriteDirectionSchema.optional(),
     fps: z.number().int().min(4).max(30).optional(),
     frameCount: z.literal(8).default(8),
@@ -118,7 +128,7 @@ export const characterBatchRequestSchema = z
   .object({
     preset: gamePresetSchema,
     animations: z.array(animationTypeSchema).min(1).max(6),
-    mode: z.enum(['standard', 'precise']).default('standard'),
+    mode: animationModeSchema,
     direction: spriteDirectionSchema.optional(),
     frameSize: z.union([z.literal(128), z.literal(256)]).optional(),
     fps: z.number().int().min(4).max(30).optional(),

@@ -55,6 +55,10 @@ export class AIOrchestrator {
     const skeleton = await this.primary.estimateSkeleton({
       image: input.baseCharacter,
     });
+    // PLACEHOLDER: every keypoint bobs on the same sine curve, so the result
+    // is identical for walk, attack and death. Real per-animation keyframes are
+    // still missing, which is why animationModeSchema rejects 'precise' at the
+    // API boundary. Do not re-enable that mode before replacing this.
     const poses = Array.from({ length: 9 }, (_, frameIndex) =>
       skeleton.keypoints.map((point) => ({
         ...point,

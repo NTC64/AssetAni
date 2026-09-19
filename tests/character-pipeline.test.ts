@@ -303,6 +303,14 @@ describe('character API and batches', () => {
         .set({ status: 'SUCCEEDED' })
         .where(eq(generations.id, response.json().id));
     }
+    const precise = await app.inject({
+      method: 'POST',
+      url: `/v1/characters/${character.id}/animations`,
+      headers: headers(),
+      payload: { animation: 'idle', mode: 'precise' },
+    });
+    expect(precise.statusCode).toBe(400);
+
     const batch = await app.inject({
       method: 'POST',
       url: `/v1/characters/${character.id}/batches`,

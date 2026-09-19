@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  animationModeSchema,
   animationTypeSchema,
   gamePresetSchema,
   generationRequestSchema,
@@ -22,7 +23,7 @@ export const characterBatchCommandSchema = z
     prompt: z.string().trim().min(1).max(800),
     preset: gamePresetSchema,
     animations: z.array(animationTypeSchema).min(1).max(6),
-    mode: z.enum(['standard', 'precise']).default('standard'),
+    mode: animationModeSchema,
   })
   .strict();
 export type CharacterBatchCommand = z.infer<typeof characterBatchCommandSchema>;

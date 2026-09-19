@@ -106,7 +106,9 @@ All character endpoints use the existing Bearer API key and generation scopes. P
 - `POST /v1/characters` creates a reusable base character.
 - `GET /v1/characters` lists the authenticated user's characters and animations.
 - `GET /v1/characters/:id` returns one character and its animation QA state.
-- `POST /v1/characters/:id/animations` queues one standard or precise animation.
+- `POST /v1/characters/:id/animations` queues one standard animation.
 - `POST /v1/characters/:id/batches` creates one normal child generation per requested animation.
 
 Each child continues to use `GET /v1/generations/:id` for polling and result URLs. A child reserves one credit and uses the existing exactly-once failure refund.
+
+Animation and batch requests accept `mode`, but only `"standard"` is supported. `"precise"` fails validation with HTTP 400 before a credit is reserved, because skeleton-driven animation is not implemented yet.

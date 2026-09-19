@@ -1,6 +1,6 @@
 # AI Sprite Sheet & Animation Generator
 
-A Cocos Creator 3.8.x sprite workflow backed by a TypeScript modular monolith. Phase 5 adds scoped API-key authentication, atomic credit accounting, a three-credit free trial, concurrency controls, and Redis-backed rate limiting.
+A Cocos Creator 3.8.x sprite workflow backed by a TypeScript modular monolith. Phase 5 adds scoped API-key authentication, atomic credit accounting, a three-credit free trial, concurrency controls, and Redis-backed rate limiting. The character animation pipeline builds on that foundation with reusable base characters, preset-driven animation batches, and deterministic frame QA.
 
 ## Current architecture
 
@@ -85,6 +85,9 @@ docs/                          API, architecture and test procedures
 - Phase 3: manually verified.
 - Phase 4: implemented with automated client, polling, extraction, and import coverage.
 - Phase 5: implemented with concurrent credit and retry/refund coverage.
-- Phase 6 and later: not started.
+- Character animation pipeline: implemented additively on top of Phase 5. See [architecture](docs/architecture.md#character-animation-pipeline).
+- Production deployment (Paddle billing, R2 storage, TLS): not started.
+
+Skeleton-driven `precise` animation is defined in the schema but not implemented; the API rejects it with HTTP 400 so no credit is spent on unusable frames.
 
 The local backend is authenticated but is still a development service without TLS or production hardening.

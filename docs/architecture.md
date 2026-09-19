@@ -1,4 +1,4 @@
-# Architecture through Phase 5
+# Architecture
 
 Phase 3 is a modular monolith with two Node.js processes:
 
@@ -31,3 +31,19 @@ Phase 5 stores users, API-key metadata, generations, and the append-only credit 
 Generation admission locks the user row. In one transaction it checks user-scoped idempotency, active-generation count, the free-plan cooldown, atomically decrements a nonnegative balance, inserts the generation, and appends the charge ledger entry. Permanent worker failure changes status and appends an idempotent refund while holding generation and user locks. A stalled worker delivery found in a nonterminal state is closed and refunded. Free users route to FLUX.1 Schnell when fal.ai is enabled; other plans use the configured primary model.
 
 Redis token buckets enforce generation and polling limits per API key. PostgreSQL remains authoritative for credits and concurrent-generation limits.
+
+## Character animation pipeline
+
+The pipeline is additive: it reuses the existing `generations` table, BullMQ queue, credit reservation, polling, failure handling, and exactly-once refund. Migration `0002_characters_batches.sql` adds `characters`, `character_animations`, and `generation_batches`.
+
+`AIOrchestrator` in `packages/ai` sits in front of the providers. PixelLab is the primary provider for base-character creation, text-driven animation, and rotations. fal.ai stays available for concept images and as the base-creation fallback when `allowFallback` is set. The orchestrator never talks to storage or the database; the worker still owns persistence.
+
+A character is created once and reused. `POST /v1/characters` queues a base-character generation; each later `POST /v1/characters/:id/animations` or `POST /v1/characters/:id/batches` reserves its own credit and inserts one normal generation row per animation, linked by `character_id` and optionally `batch_id`. Clients keep polling `GET /v1/generations/:id`, so there is no second status protocol.
+
+Presets live in code only, in `packages/core/src/presets.ts`: `platformer`, `side_scroller`, and `top_down_rpg`. A preset fixes frame size, per-animation fps, the available animations, the directions, and the pivot. Explicit request fields override individual preset values.
+
+Provider frames pass through the same Sharp normalization as single generations, then through `runAnimationQa` in `packages/image`. QA is deterministic and provider-independent: it checks frame count, exact dimensions, foreground ratio, baseline stability, bounding boxes, and adjacent-frame difference, and returns `PASS`, `WARN`, or `FAIL`. The result is stored on the generation and the character animation row. `FAIL` stops packaging.
+
+Skeleton-driven `precise` animation is not implemented. `animationModeSchema` in `packages/contracts` rejects it, so requests fail validation with HTTP 400 before a credit is reserved. The orchestrator still contains an unused skeleton code path whose pose interpolation is a placeholder: every keypoint follows the same sine curve regardless of animation type. That code must be replaced with real per-animation keyframes before the mode is re-enabled.
+
+The Cocos extension keeps the single-generation path unchanged and adds named batch folders plus `{character}_{animation}.anim` clips.

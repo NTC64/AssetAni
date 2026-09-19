@@ -1,6 +1,7 @@
 import { build, context } from 'esbuild';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { buildAiPoc } from './build-ai.mjs';
+import { buildBackend } from './build-backend.mjs';
 const root = 'apps/cocos-plugin';
 const options = {
   entryPoints: {
@@ -39,4 +40,5 @@ if (process.argv.includes('--watch')) {
   );
   console.log(`Standalone extension ready: ${destination}`);
   console.log(`Standalone development POC ready: ${await buildAiPoc()}`);
+  console.log(`Phase 5 backend ready: ${await buildBackend()}`);
 }

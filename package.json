@@ -9,28 +9,49 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --watch",
+    "dev:api": "node --env-file=.env --import tsx --watch apps/api/src/server.ts",
+    "dev:worker": "node --env-file=.env --import tsx --watch apps/worker/src/worker.ts",
+    "start:api": "node --env-file=.env dist/backend/api.cjs",
+    "start:worker": "node --env-file=.env dist/backend/worker.cjs",
+    "db:migrate": "node --env-file=.env scripts/migrate-db.mjs",
+    "user:create": "node --env-file=.env --import tsx scripts/create-user.ts",
+    "docker:dev": "docker compose -f infra/docker-compose.dev.yml up -d",
     "fixtures": "node scripts/create-fixtures.mjs",
     "lint": "eslint apps packages tests scripts/**/*.ts && prettier --check .",
     "test:ai": "node scripts/run-ai.mjs",
+    "reprocess:ai": "node scripts/run-reprocess.mjs",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run tests/backend-integration.test.ts"
   },
   "devDependencies": {
-    "@sprite/ai": "workspace:*",
-    "@sprite/image": "workspace:*",
-    "@sprite/contracts": "workspace:*",
-    "sharp": "0.35.4",
-    "zod": "3.25.76",
-    "fflate": "0.8.3",
     "@cocos/creator-types": "3.8.8",
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "9.39.2",
+    "@sprite/ai": "workspace:*",
+    "@sprite/contracts": "workspace:*",
+    "@sprite/image": "workspace:*",
     "@types/node": "22.19.7",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.10",
     "esbuild": "0.25.12",
     "eslint": "9.39.2",
+    "fflate": "0.8.3",
     "prettier": "3.8.1",
+    "redis-memory-server": "^0.14.1",
+    "sharp": "0.35.4",
+    "tsx": "4.21.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.53.1",
-    "vitest": "3.2.4"
+    "vitest": "3.2.4",
+    "zod": "3.25.76"
+  },
+  "dependencies": {
+    "bullmq": "^5.81.4",
+    "drizzle-orm": "^0.44.7",
+    "fastify": "^5.12.3",
+    "ioredis": "^5.11.1",
+    "pg": "^8.23.0"
   }
 }

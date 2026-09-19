@@ -6,4 +6,5 @@ coverage/
 .pnpm-store/
 .npm-cache/
 *.tsbuildinfo
-artifacts/ai-poc/
+artifacts/
+.runtime-temp/

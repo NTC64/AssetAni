@@ -6,13 +6,19 @@ Requirements: Node.js 22, pnpm 10.28.2, Docker Desktop (for the manual PostgreSQ
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm docker:dev
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
 ```
 
-`pnpm test` starts isolated PostgreSQL-compatible PGlite and a temporary Redis process for the backend integration flow. It uses the fake AI provider and makes no paid call. The normal runtime uses PostgreSQL through Drizzle's `node-postgres` adapter.
+On Windows, run `pnpm docker:dev` before `pnpm test`. The backend integration suite runs a real BullMQ queue and worker, so it needs Redis:
+
+- Windows: the suite connects to an external Redis at `TEST_REDIS_URL`, default `redis://127.0.0.1:6379`. Without the Compose Redis it fails with `ECONNREFUSED 127.0.0.1:6379`.
+- macOS and Linux: the suite starts its own temporary Redis through `redis-memory-server` and needs no Docker.
+
+The database side never needs a service: the suite uses PostgreSQL-compatible PGlite in-process. Tests use the fake AI provider and make no paid call. The normal runtime uses PostgreSQL through Drizzle's `node-postgres` adapter.
 
 ## Run the API and worker locally
 

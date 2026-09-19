@@ -1,21 +1,33 @@
-# Architecture through Phase 2
+# Architecture through Phase 5
 
-## Standalone AI POC
+Phase 3 is a modular monolith with two Node.js processes:
 
-`scripts/test-ai.ts` → `AiProvider` → 1024 × 1024 PNG → Sharp slicing/masking/normalization → local result files and ZIP. The fake provider and fal provider implement the same small interface. Neither is imported by the Cocos extension. No application server, infrastructure queue, or storage service is added.
+```text
+Cocos panel --> extension main process -- Bearer key --> Fastify API --> PostgreSQL
+                    ^                      |
+                    |                      v
+                    |               Redis / BullMQ --> Worker
+                    |                                  --> AiProvider
+                    |                                  --> Sharp
+                    +-- validated result.zip <-- local filesystem
+```
 
-Each run uses a unique output directory. Per-case metadata records provider/model, requested and resolved seed, request ID, prompt, duration, diagnostic geometry, output path, and pending human review fields. Successful processing means a usable image package was produced, not that the model drew a correct eight-frame animation. See `phase-2.md` for limitations and acceptance.
+The API validates requests, writes the generation row, and enqueues a small `{ generationId }` job. PostgreSQL is the source of truth. Redis contains no prompt, image, or result package beyond the job identifier. BullMQ uses queue `sprite-generation` and the generation UUID as `jobId`.
 
-## Cocos local import
+The worker reads the request from PostgreSQL, moves it through the explicit state machine, calls the selected `AiProvider`, runs the Phase 2 Sharp pipeline, creates the manifest/sheet/frames ZIP, and copies the output from an isolated temporary directory to `RESULT_STORAGE_PATH/{generationId}`. Temporary directories are always removed in `finally`; directories older than two hours are cleaned when the worker starts.
 
-Panel → extension message → main import orchestrator → CocosAdapter → Asset Database and scene process.
+The fake and fal.ai providers implement the same interface. Automated tests use only the fake provider. Turbo generation uses FLUX.2 Turbo Edit with a generated 4×2 pose guide for idle, walk, or attack; Schnell remains a text-to-image fallback. Retryable transport errors use at most three calls with 2-second and 8-second backoff before later attempts plus ±20% jitter. Invalid layout, matte, motion, or character-palette consistency may receive exactly one strict 4x2 regeneration. This generation-level retry stays enabled for fake tests and is disabled for paid fal output by default; the user must press Retry to authorize another billed generation. A final rejected result fails and refunds the application credit instead of importing an unusable clip.
 
-The panel only starts the import and displays a result. A main-process lock prevents simultaneous Test Import operations even if the panel is reopened. The importer validates the Zod manifest, checks source real paths remain inside the fixture directory, and checks PNG signatures and 256 × 256 dimensions before any project mutation.
+PostgreSQL transitions use a compare-and-update guard against the current status. Terminal states cannot transition. A failed generation stores a stable public error code and sanitized message. Credit charging/refunds, users, API keys, Paddle, R2, recovery scheduling and production deployment remain outside Phase 3.
 
-`cocos-adapter.ts` defines the version-independent interface. All Cocos Editor calls, engine loading, serialization, and metadata configuration live in `cocos-3.8-adapter.ts`. The main process does not load `cc`; the scene process loads the engine lazily. The three bundles share source, not process memory.
+The panel sends typed commands to the extension main process. `ApiClient` sends the shared generation request, requires HTTP 202, and rejects invalid responses. `GenerationService` polls the authoritative backend status after 2, 4, then 8 seconds for every later attempt. A client timeout leaves the backend generation running; Retry resumes polling the same generation. A terminal backend failure starts a new generation on Retry.
 
-Import order is manifest order. AssetDB imports each PNG and configures the image as a SpriteFrame. SpriteFrame subasset UUIDs are read from imported metadata and checked through AssetDB, never constructed using assumed suffixes. Texture filters use nearest sampling; SpriteFrames disable trimming and use the manifest pivot. The scene process loads the UUIDs, creates the clip at the requested FPS, sets loop mode and duration, serializes it, and returns JSON text across IPC. AssetDB creates/saves the `.anim` file.
+Package downloads must use the backend origin, cannot redirect, and are capped at 32 MiB. Extraction accepts only `manifest.json`, `sheet.png`, and the eight manifest frame paths. It rejects path traversal, duplicate or extra entries, oversized expanded data, generation-ID mismatches, and invalid PNG dimensions before calling Cocos AssetDB. The importer then writes to `db://assets/AI_Sprites/{generationId}`, refreshes the database, resolves SpriteFrame UUIDs in manifest order, and creates `{animation}.anim` through the scene process.
 
-The importer writes only below `db://assets/AI_Sprites/{folder}`. It never directly writes project filesystem assets, `library/`, or `temp/`. Repeating Test Import overwrites fixture assets in the same folder and saves the existing clip. Unrelated assets are untouched. A failure may leave partially imported test assets; retry is the recovery procedure. Import is not a transaction and no destructive rollback is attempted.
+The operation lives in the extension main process, so closing and reopening the panel does not cancel it. The panel reads a snapshot for progress and presents sanitized retryable errors.
 
-Real Creator runtime validation is separate from the mock tests. The scene must be available, the database must be ready, and version-specific importer behavior must pass the manual test before the phase is accepted.
+Phase 5 stores users, API-key metadata, generations, and the append-only credit ledger in PostgreSQL. Raw keys contain 32 random bytes and are stored only by the client; the database stores an HMAC-SHA256 digest made with `API_KEY_PEPPER`. Authentication checks expiry, revocation, ownership, and route scope.
+
+Generation admission locks the user row. In one transaction it checks user-scoped idempotency, active-generation count, the free-plan cooldown, atomically decrements a nonnegative balance, inserts the generation, and appends the charge ledger entry. Permanent worker failure changes status and appends an idempotent refund while holding generation and user locks. A stalled worker delivery found in a nonterminal state is closed and refunded. Free users route to FLUX.1 Schnell when fal.ai is enabled; other plans use the configured primary model.
+
+Redis token buckets enforce generation and polling limits per API key. PostgreSQL remains authoritative for credits and concurrent-generation limits.

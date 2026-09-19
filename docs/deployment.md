@@ -1,9 +1,9 @@
-# Phase 1 distribution
+# Deployment status after Phase 5
 
-Run `pnpm build` to create `dist/ai-sprite-generator`. It contains a Cocos manifest without workspace dependencies, three CommonJS bundles, source maps, and eight local test PNGs with their manifest.
+Phase 3 provides local API and worker bundles at `dist/backend/api.cjs` and `dist/backend/worker.cjs`, plus a development-only Compose file for PostgreSQL and Redis.
 
-Copy this directory into `<project>/extensions/ai-sprite-generator`, enable it in Creator's project Extension Manager, and open it through the Develop menu. The build does not modify an installed editor or an external project. See `PHASE_1_TEST.md` for the installation and playback gate.
+There is no production deployment configuration. Caddy, production Dockerfiles, GHCR publishing, managed PostgreSQL selection, R2, signed storage URLs and secret provisioning are deferred to Phase 7. The development Compose ports bind only to `127.0.0.1`.
 
-Bundles target Node 16 syntax for the embedded editor runtime; development tooling targets Node 22. Cocos itself supplies the external `cc` engine module only in the scene process. All other runtime dependencies are bundled.
+The standalone Phase 4 Cocos extension is built at `dist/ai-sprite-generator`. It defaults to the local API URL, while the field remains editable for development environments.
 
-API hosting, Docker, database, Redis, R2, Paddle, and CI image publishing are intentionally unimplemented. Phase 2's FAL_KEY is used only by the local Node POC, not by the extension or an API server. Production deployment preparation begins in later approved phases. Never describe these local proofs as a deployed or production-ready SaaS.
+Phase 5 adds API-key authentication, Redis rate limiting, and PostgreSQL credit enforcement. TLS, secret provisioning, R2 and production container hardening remain Phase 7 work, so this development API should not be exposed publicly.

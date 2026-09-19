@@ -140,6 +140,20 @@ export function buildPixelLabMotionPrompt(
   }[animation].replaceAll('right', direction);
 }
 
+/**
+ * PixelLab bills a background job from the moment it is accepted. The worker's
+ * provider-level retry re-runs the whole call, which submits a *second* paid
+ * job, so any failure raised after acceptance must be reported as
+ * non-retryable. Only failures while submitting are safe to retry.
+ */
+function afterJobAccepted(error: unknown): never {
+  if (error instanceof AiProviderError)
+    throw error.retryable
+      ? new AiProviderError(error.code, error.message, false)
+      : error;
+  throw new AiProviderError('PROVIDER_ERROR', 'PixelLab job failed.', false);
+}
+
 export function createPixelLabProvider(
   options: PixelLabProviderOptions,
 ): SpriteAIProvider {
@@ -230,18 +244,22 @@ export function createPixelLabProvider(
   }
 
   async function framesFromJob(jobId: string) {
-    const job = await pollJob(jobId);
-    const result = parseProviderResponse(
-      imagesResponseSchema,
-      job.last_response,
-    );
-    return {
-      frames: orderedFrames(result.images),
-      provider: 'pixellab' as const,
-      providerJobId: jobId,
-      providerCostUsd:
-        providerCostUsd(job.usage) ?? providerCostUsd(result.usage),
-    };
+    try {
+      const job = await pollJob(jobId);
+      const result = parseProviderResponse(
+        imagesResponseSchema,
+        job.last_response,
+      );
+      return {
+        frames: orderedFrames(result.images),
+        provider: 'pixellab' as const,
+        providerJobId: jobId,
+        providerCostUsd:
+          providerCostUsd(job.usage) ?? providerCostUsd(result.usage),
+      };
+    } catch (error) {
+      afterJobAccepted(error);
+    }
   }
 
   const provider: SpriteAIProvider = {

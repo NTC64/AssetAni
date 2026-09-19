@@ -298,7 +298,7 @@ describe('PixelLab provider', () => {
     );
   });
 
-  it('marks network errors and job timeouts retryable', async () => {
+  it('marks a failure while submitting retryable', async () => {
     const networkProvider = createPixelLabProvider({
       token: 'token',
       fetcher: vi.fn(async () => {
@@ -308,7 +308,9 @@ describe('PixelLab provider', () => {
     await expect(
       networkProvider.createBaseCharacter({ prompt: 'knight', frameSize: 64 }),
     ).rejects.toEqual(expect.objectContaining({ retryable: true }));
+  });
 
+  it('does not mark a job timeout retryable, so the job is billed once', async () => {
     let time = 0;
     const timeoutProvider = createPixelLabProvider({
       token: 'token',
@@ -335,7 +337,32 @@ describe('PixelLab provider', () => {
     ).rejects.toEqual(
       expect.objectContaining({
         name: AiProviderError.name,
-        retryable: true,
+        retryable: false,
+      }),
+    );
+  });
+
+  it('does not mark a polling failure retryable once the job was accepted', async () => {
+    let call = 0;
+    const pollingProvider = createPixelLabProvider({
+      token: 'token',
+      sleep: async () => {},
+      fetcher: vi.fn(async () => {
+        call += 1;
+        if (call === 1) return jsonResponse({ background_job_id: 'job' });
+        throw new Error('offline while polling');
+      }) as unknown as typeof fetch,
+    });
+    await expect(
+      pollingProvider.animateWithText({
+        baseCharacter: Buffer.from('base'),
+        animation: 'walk',
+        frameCount: 8,
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: AiProviderError.name,
+        retryable: false,
       }),
     );
   });
